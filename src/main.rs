@@ -25,21 +25,26 @@ fn main() {
         convert_lengths(l_str)
     };
 
-    let ring = compute(size,lenghts, extra_len, cycles);
+    let sparse = sparse_hash(size, lenghts, extra_len, cycles);
 
-    println!("Result = {}", (ring[0] as u32 * ring[1] as u32));
+    println!("Result = {}", (sparse[0] as u32 * sparse[1] as u32));
+
+    let hash_str = as_hex_string(dense_hash(sparse));
+
+    println!("Hash = {}", hash_str);
 }
 
-fn compute(size: usize, mut lenghts: Vec<u8>, extra: Vec<u8>, cycles: usize) -> Vec<u8> {
+fn sparse_hash(size: usize, mut lenghts: Vec<u8>, extra: Vec<u8>, cycles: usize) -> Vec<u8> {
     let mut ring = (0..size).map(|u| u as u8).collect::<Vec<_>>();
     {
         lenghts.extend(extra);
 
-        for _ in 1..cycles {
-            let c = lenghts.clone();
-            lenghts.extend(c);
+        let mut all = Vec::<u8>::with_capacity(lenghts.len() * cycles);
+
+        for _ in 0..cycles {
+            all.extend(lenghts.iter());
         }
-        hash(&mut ring, &lenghts);
+        hash(&mut ring, &all);
     }
     ring
 }
@@ -83,6 +88,21 @@ fn parse_lengths<S: AsRef<str>>(data: S) -> Vec<u8> {
     data.as_ref().split(',')
         .map(|t| t.parse::<u8>().unwrap())
         .collect()
+}
+
+fn xor_it<V: AsRef<[u8]>>(v: V) -> u8 {
+    v.as_ref().iter().fold(0, |s, e| s ^ e)
+}
+
+
+fn dense_hash<V: AsRef<[u8]>>(v: V) -> Vec<u8> {
+    v.as_ref()
+        .chunks(16).map(xor_it)
+        .collect()
+}
+
+fn as_hex_string<V: AsRef<[u8]>>(v: V) -> String {
+    v.as_ref().iter().map(|u| format!("{:02x}", u)).collect::<Vec<_>>().join("")
 }
 
 #[cfg(test)]
@@ -133,5 +153,50 @@ mod test {
     #[test]
     fn test_convert_lengths() {
         assert_eq!(vec![49, 44, 50, 44, 51], convert_lengths("1,2,3"))
+    }
+
+    #[test]
+    fn dense_hash_simple() {
+        assert_eq!(vec![64], dense_hash(vec![65, 27, 9, 1, 4, 3, 40, 50, 91, 7, 6, 0, 2, 5, 68, 22]))
+    }
+
+    #[test]
+    fn dense_hash_two() {
+        assert_eq!(vec![64,41], dense_hash(vec![65, 27, 9, 1, 4, 3, 40, 50, 91, 7, 6, 0, 2, 5, 68, 22,
+                                                65, 27, 9, 1, 4, 3, 40, 0, 0, 7, 6, 0, 2, 5, 68, 22]))
+    }
+
+    #[test]
+    fn test_as_hex_str() {
+        assert_eq!("ae021f12".to_string(), as_hex_string(vec![0xae, 0x02, 0x1f, 0x12]))
+    }
+
+    fn process_puzzle(puzzle: &str) -> String {
+        let lengths = convert_lengths(puzzle);
+        let extra = vec![17, 31, 73, 47, 23];
+        let size = 256;
+        let cycle = 64;
+
+        as_hex_string(dense_hash(sparse_hash(size, lengths, extra, cycle)))
+    }
+
+    #[test]
+    fn integration_0() {
+        assert_eq!("a2582a3a0e66e6e86e3812dcb672a272", process_puzzle(""))
+    }
+
+    #[test]
+    fn integration_1() {
+        assert_eq!("33efeb34ea91902bb2f59c9920caa6cd", process_puzzle("AoC 2017"))
+    }
+
+    #[test]
+    fn integration_2() {
+        assert_eq!("3efbe78a8d82f29979031a4aa0b16a9d", process_puzzle("1,2,3"))
+    }
+
+    #[test]
+    fn integration_3() {
+        assert_eq!("63960835bcdc130f0b66d7ff4f6a5a8e", process_puzzle("1,2,4"))
     }
 }
